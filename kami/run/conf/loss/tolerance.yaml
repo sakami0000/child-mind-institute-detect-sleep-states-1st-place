@@ -1,0 +1,4 @@
+name: tolerance
+loss_weight:
+  - 0.5 # bce
+  - 0.5 # tolerance

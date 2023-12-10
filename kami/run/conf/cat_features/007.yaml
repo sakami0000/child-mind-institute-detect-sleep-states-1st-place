@@ -1,0 +1,9 @@
+minute_15:
+  dim: 4
+  num_category: 15
+hour:
+  dim: 10
+  num_category: 24
+periodicity:
+  dim: 4
+  num_category: 2

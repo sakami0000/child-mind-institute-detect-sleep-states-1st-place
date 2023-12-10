@@ -1,0 +1,7 @@
+name: focal_bce
+alpha: 0.5
+gamma: 2.0
+
+weight:
+  - 1.0 # bce
+  - 10.0 # focal
