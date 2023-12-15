@@ -1,0 +1,6 @@
+periodicity:
+  dim: 4
+  num_category: 2
+hour:
+  dim: 10
+  num_category: 24

@@ -1,0 +1,19 @@
+version: "3"
+services:
+  kaggle:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - $PWD:/kaggle/working
+    working_dir: /kaggle/working
+    command: bash -c "echo start && /bin/bash"
+    tty: true  
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+    shm_size: '2gb'

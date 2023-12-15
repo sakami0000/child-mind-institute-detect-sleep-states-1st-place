@@ -1,0 +1,4 @@
+name: SpecWeightAvg
+encoder_name: resnet34
+encoder_weights: imagenet
+filter_size: 12

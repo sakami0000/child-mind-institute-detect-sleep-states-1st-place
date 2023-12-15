@@ -1,0 +1,4 @@
+name: Spec2DCNNSplitCat
+encoder_name: resnet34
+encoder_weights: imagenet
+n_split: 3

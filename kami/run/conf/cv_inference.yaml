@@ -1,0 +1,77 @@
+# ---------- Overriding hydra default configs ----------
+hydra:
+  job:
+    name: cv_inference
+    chdir: true
+  run:
+    dir: ${dir.output_dir}/${hydra.job.name}/${exp_name}/single
+  sweep:
+    dir: ${dir.output_dir}/${hydra.job.name}/${exp_name}
+    subdir: run${hydra.job.num}
+
+defaults:
+  - _self_
+  - dir: local
+  - model: Spec2DCNN
+  - feature_extractor: CNNSpectrogram
+  - decoder: UNet1DDecoder
+  - features: base
+  - post_process: score
+  # phase: train 用
+  - split@fold_0: stratify_fold_0
+  - split@fold_1: stratify_fold_1
+  - split@fold_2: stratify_fold_2
+  - split@fold_3: stratify_fold_3
+  - split@fold_4: stratify_fold_4
+  - loss: bce
+
+datamodule:
+  how: random # random, stride, overlap
+  train_stride: 3600 # 3h=2160, 5h=3600, 8h=5760
+  overlap: 0 
+  zero_periodicity: false
+
+debug: false
+
+num_fold: 5
+num_tta: 2
+
+exp_name: dummy
+phase: test
+weight:
+  exp_name: ${exp_name}
+  run_name: cv
+
+
+how_post_process: 'peaks' # group_by_day
+
+seed: 42
+duration: 5760 # durationは32の倍数
+downsample_rate: 2 # durationをdownsample_rateで割った値がnum_framesになる
+upsample_rate: 1
+batch_size: 32
+num_workers: 2
+use_amp: true
+
+# augmentation
+augmentation:
+  mixup_prob: 0.0
+  mixup_alpha: 0.4
+  cutmix_prob: 0.0
+  cutmix_alpha: 0.4
+
+
+# label
+labels:
+  - "awake"
+  - "event_onset"
+  - "event_wakeup"
+label_weight:
+  - 1.0
+  - 1.0
+  - 1.0
+pos_weight:
+  - 1.0
+  - 1.0
+  - 1.0
+

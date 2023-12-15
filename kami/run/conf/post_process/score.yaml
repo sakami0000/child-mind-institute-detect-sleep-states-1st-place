@@ -1,0 +1,8 @@
+score_th: 0.0038536 
+distance: 80
+remove_periodicity: false
+periodicity:
+  filter_size: 10
+  #downsample_rate: 15
+  #split_hour: 8 # 4 にすると周期性を検出できないものがあった
+  #th: 0.99
