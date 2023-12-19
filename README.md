@@ -25,3 +25,7 @@
     ```sh
     inv run-all --overwrite-folds
     ```
+
+## How to submission
+
+- Use [this notebook](https://www.kaggle.com/shimacos/kaggle-smi-submission-final)
