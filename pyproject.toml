@@ -13,6 +13,7 @@ dependencies = [
     "pillow==9.5.0",
     "torch==2.0.1+cu118",
     "torchvision==0.15.2+cu118",
+    "torchaudio==2.0.2+cu118",
     "lightgbm>=4.0.0",
     "catboost>=1.2",
     "xgboost>=1.7.6",
@@ -33,6 +34,7 @@ dependencies = [
     "loguru>=0.7.2",
     "segmentation_models_pytorch>=0.3.3",
     "invoke>=2.2.0",
+    "pathlib>=1.0.1",
 ]
 readme = "README.md"
 requires-python = ">= 3.10"
