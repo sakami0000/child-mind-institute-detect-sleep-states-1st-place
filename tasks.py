@@ -135,11 +135,18 @@ def run_shimacos_2nd(c: Config) -> None:
     requires:
     - input/stacking/030_truncate.pkl
     outputs:
-    - shimacos/output/stacking_exp059_030_truncate_lgbm/result/pred_onset.parquet
-    - shimacos/output/stacking_exp059_030_truncate_lgbm/result/pred_wakeup.parquet
-    - shimacos/output/stacking_exp060_030_truncate_small/valid.parquet
-    - shimacos/output/stacking_exp061_030_truncate_cat/result/pred_onset.parquet
-    - shimacos/output/stacking_exp061_030_truncate_cat/result/pred_wakeup.parquet
+    - model
+        - shimacos/output/stacking_exp059_030_truncate_lgbm/model/booster_onset.pkl
+        - shimacos/output/stacking_exp059_030_truncate_lgbm/model/booster_wakeup.pkl
+        - shimacos/output/stacking_exp060_030_truncate_small/fold*/model/*.ckpt
+        - shimacos/output/stacking_exp061_030_truncate_cat/model/booster_label_onset.pkl
+        - shimacos/output/stacking_exp061_030_truncate_cat/model/booster_label_wakeup.pkl
+    - oof
+        - shimacos/output/stacking_exp059_030_truncate_lgbm/result/pred_onset.parquet
+        - shimacos/output/stacking_exp059_030_truncate_lgbm/result/pred_wakeup.parquet
+        - shimacos/output/stacking_exp060_030_truncate_small/valid.parquet
+        - shimacos/output/stacking_exp061_030_truncate_cat/result/pred_onset.parquet
+        - shimacos/output/stacking_exp061_030_truncate_cat/result/pred_wakeup.parquet
 
     """
     with c.cd("shimacos"):
