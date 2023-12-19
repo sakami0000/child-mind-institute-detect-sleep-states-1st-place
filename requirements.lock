@@ -134,6 +134,7 @@ packaging==23.1
 pandas==2.0.3
 pandocfilters==1.5.0
 parso==0.8.3
+pathlib==1.0.1
 pathtools==0.1.2
 pexpect==4.8.0
 pickleshare==0.7.5
@@ -197,6 +198,7 @@ tinycss2==1.2.1
 tokenizers==0.13.3
 tomli==2.0.1
 torch==2.0.1+cu118
+torchaudio==2.0.2+cu118
 torchmetrics==1.0.3
 torchvision==0.15.2+cu118
 tornado==6.3.3
