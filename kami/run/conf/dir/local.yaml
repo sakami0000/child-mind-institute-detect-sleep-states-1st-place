@@ -1,8 +1,8 @@
-data_dir: /kaggle/working/input/child-mind-institute-detect-sleep-states
-processed_dir: /kaggle/working/kami/processed
-output_dir: /kaggle/working/kami/output
-model_dir: /kaggle/working/kami/output/train
-cv_model_dir: /kaggle/working/kami/output/cv_train
-kami_dir: /kaggle/working/kami
-input_dir: /kaggle/working/input
+data_dir: /root/app/input/
+processed_dir: /root/app/kami/processed
+output_dir: /root/app/kami/output
+model_dir: /root/app/kami/output/train
+cv_model_dir: /root/app/kami/output/cv_train
+kami_dir: /root/app/kami
+input_dir: /root/app/input
 sub_dir: ./
