@@ -5,11 +5,8 @@ import re
 import time
 from contextlib import contextmanager
 
-import hydra
 import polars as pl
 import yaml
-from omegaconf import DictConfig
-
 from components.metrics import score
 from components.preprocess.feature_creator import (
     LIDFeatureCreator,
@@ -69,14 +66,12 @@ def make_chunk_data(sub_df: pl.DataFrame, step_size: int = 360) -> pl.DataFrame:
     return chunk_df
 
 
-@hydra.main(config_path="../../yamls", config_name="stacking.yaml", version_base=None)
-def main(config: DictConfig) -> None:
+def main() -> None:
     """
     1 minuteでtruncateする
     """
     VERSION = re.split("[.]", os.path.basename(__file__))[-2]
     os.makedirs("./input/stacking", exist_ok=True)
-
 
     with timer("load_data"):
         series_df = load_data()
