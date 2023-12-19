@@ -1,0 +1,127 @@
+defaults:
+  - feature: "stacking_001"
+  # - override hydra/job_logging: colorlog
+  # - override hydra/hydra_logging: colorlog
+
+workdir: ${store.workdir}
+seed: 777
+
+feature:
+  sakami_model_names: ["148_gru_scale_factor", "156_gru_transformer_residual"]
+  kami_model_names: ["exp068_transformer", "exp078_lstm"]
+  label_col: label
+  pred_col: ${feature.label_col}_pred
+
+lgbm:
+  n_fold: 5
+  numerical_cols: ${feature.numerical_cols}
+  cat_cols: ${feature.cat_cols}
+  label_col: ${feature.label_col}
+  pred_col: ${feature.pred_col}
+  early_stopping_rounds: 200
+  verbose_eval: 100
+  negative_sampling: False
+  batch_fit: False
+  batch_iter: 500
+  params:
+    lambda_l1: 0.1
+    lambda_l2: 0.1
+    num_leaves: 32
+    label_gain:
+    lambdarank_truncation_level:
+    feature_fraction: 0.8
+    bagging_fraction: 0.8
+    bagging_freq: 1
+    min_child_samples: 10
+    task: train
+    boosting_type: gbdt
+    objective: binary
+    metric: binary_logloss
+    max_depth: 8
+    learning_rate: 0.01
+    num_thread: -1
+    max_bin: 256
+    verbose: -1
+    device: cpu
+    scale_pos_weight: 1
+    seed: ${seed}
+    num_class: 1
+    is_unbalance: False
+
+xgb:
+  feature_cols: [""] #関数内で書き換える
+  cat_cols:
+  label_col: "label"
+  early_stopping_rounds: 200
+  verbose_eval: 100
+  params:
+    alpha: 0.1
+    reg_lambda: 0.1
+    max_leaves: 16
+    colsample_bytree: 1.0
+    subsample: 0.8
+    min_child_weight: 10
+    booster: gbtree
+    objective: binary:logistic
+    eval_metric: auc
+    max_depth: 6
+    learning_rate: 0.01
+    nthread: -1
+    max_bin: 256
+    tree_method: gpu_hist
+    scale_pos_weight: 1
+    seed: ${seed}
+
+catboost:
+  n_fold: 5
+  numerical_cols: ${feature.numerical_cols}
+  cat_cols: ${feature.cat_cols}
+  label_col: ${feature.label_col}
+  pred_col: ${feature.pred_col}
+  early_stopping_rounds: 200
+  verbose_eval: 100
+  categorical_features_indices:
+  negative_sampling: False
+  params:
+    task_type: GPU
+    iterations: 100000
+    loss_function: Logloss
+    eval_metric: Logloss
+    custom_metric: Logloss
+    bootstrap_type: Bernoulli
+    subsample: 0.8
+    max_depth: 8
+    max_ctr_complexity: 4
+    learning_rate: 0.05
+    max_bin: 254
+    verbose: 100
+    devices: "0"
+    use_best_model: True
+    od_type: Iter
+    od_wait: 100
+    random_seed: ${seed}
+    gpu_ram_part: 0.95
+    allow_writing_files: False
+
+store:
+  workdir: ${oc.env:PWD}
+  model_name: stacking_${feature.version}
+  root_path: ${store.workdir}/output/${store.model_name}
+  save_path: ${store.workdir}/output/${store.model_name}
+  model_path: ${store.workdir}/output/${store.model_name}/model
+  log_path: ${store.workdir}/output/${store.model_name}/logs
+  result_path: ${store.workdir}/output/${store.model_name}/result
+  gcs_path: shimacos/${store.model_name}
+  save_feature: False
+  wandb_project:
+  gcs_project:
+  bucket_name:
+
+hydra:
+  run:
+    dir: ${store.save_path}/logs
+  sweep:
+    dir: ${store.save_path}
+    subdir: log
+  job:
+    chdir: False
