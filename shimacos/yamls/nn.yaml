@@ -1,0 +1,200 @@
+defaults:
+  - _self_
+  - feature: "001"
+  - override hydra/job_logging: colorlog
+  - override hydra/hydra_logging: colorlog
+
+runner: ClassificationRunner
+debug: False
+
+base:
+  gpu_id: ["0"]
+  num_cores: 8
+  loss_class: nn.BCEWithLogitsLoss
+  scheduler_class: GradualWarmupScheduler
+  use_transformer_parameter: True
+  opt_class: Adam
+  distance: 110
+  height: 0.001
+
+data:
+  dataset_version: ${feature.version}
+  feature: ${feature}
+  dataset_class: SleepDataset
+  workdir: ${oc.env:PWD}
+  train_path: ${store.workdir}/input/preprocess/${data.dataset_version}.parquet
+  features_path: ${store.workdir}/input/preprocess/${data.dataset_version}.npy
+  test_path: ${store.workdir}/input/preprocess/${data.dataset_version}.parquet
+  std_path: ${store.model_path}/std.pkl
+  id_col: series_id
+  label_col: label
+  prob_col: ${data.label_col}_prob
+  pred_col: ${data.label_col}_pred
+  # multi labelの時のみ使用
+  label_cols: ${feature.label_cols}
+  pred_cols: ${feature.pred_cols}
+  # データセット作成parameter
+  chunk_size: 17280 # 12 * 60 * 24
+  window_size: 8640
+  n_fold: 0
+  seed: 777
+  is_train: True
+  is_stacking: False
+  use_pseudo_label: False
+  normalize: False
+  use_biol_label: False
+  use_multi_label: False
+  use_only_positive_chunk: False
+  use_only_non_periodicity: False
+  downsample_feature: False
+
+model:
+  model_class: CNNRNN
+  num_feature: # code内で補完
+  num_category: # code内で補完
+  num_label: 1
+  num_layers: 4
+  num_heads: 8 # Transformer用
+  hidden_size: 128
+  embedding_size: 32
+  max_position_embeddings: 512
+  change_transformer_config: False
+  num_hidden_layers: 6
+  transformer_hidden_size: 768
+  use_gru: False
+  is_linear_head: False
+  dropout_rate: 0.1
+  max_seq_len: ${data.chunk_size}
+  encoder: cnn
+  decoder: cnn
+  stride: 2
+  kernel_sizes:
+    - 11
+    - 7
+    - 5
+  text:
+    pretrained: False
+    backbone: microsoft/deberta-v3-xsmall
+
+store:
+  workdir: ${oc.env:PWD}
+  model_name: exp001_baseline
+  root_path: ${store.workdir}/output
+  gcs_path: shimacos/${store.model_name}/fold${data.n_fold}
+  save_path: ${store.root_path}/${store.model_name}/fold${data.n_fold}
+  feature_path: ${store.save_path}/feature
+  extact_feature_model_path: ${store.save_path}/model
+  model_path: ${store.save_path}/model
+  log_path: ${store.save_path}/logs
+  result_path: ${store.save_path}/result
+  save_feature: False
+  gcs_project:
+  bucket_name:
+
+train:
+  seed: ${data.seed}
+  epoch: 100
+  batch_size: 32
+  accumulation_steps: 1
+  learning_rate: 0.00001
+  warm_start: False
+  refinement_step: 5
+  loss_weight: 5
+  warmup_multiplier: 10
+  warmup_rate: 0.1
+  refine_target: False
+  use_gaussian_target: False
+  scheduler:
+    patience: 2
+  callbacks:
+    monitor_metric: score
+    mode: max
+    patience: 5
+
+test:
+  is_tta: False
+  is_validation: False
+  batch_size: 8
+
+# pytorch lightningの設定
+wandb_logger:
+  _target_: pytorch_lightning.loggers.WandbLogger
+  name: ${store.model_name}_fold${data.n_fold}
+  project: kaggle-cmi
+  group: ${store.model_name}
+  save_dir: ${store.log_path}
+  mode: disabled
+
+# callbacks
+checkpoint_callback:
+  _target_: pytorch_lightning.callbacks.ModelCheckpoint
+  dirpath: ${store.model_path}
+  filename: ${store.model_name}-{epoch}-{step}
+  monitor: ${train.callbacks.monitor_metric}
+  save_top_k: 1
+  save_weights_only: False
+  mode: ${train.callbacks.mode}
+  verbose: True
+lr_callback:
+  _target_: pytorch_lightning.callbacks.LearningRateMonitor
+  logging_interval: step
+
+earlystop_callback:
+  _target_: pytorch_lightning.callbacks.EarlyStopping
+  monitor: ${checkpoint_callback.monitor}
+  patience: 20
+  verbose: True
+  mode: ${checkpoint_callback.mode}
+
+weight_callback:
+  _target_: pytorch_lightning.callbacks.ModelSummary
+  max_depth: 2
+
+swa_callback:
+  _target_: pytorch_lightning.callbacks.StochasticWeightAveraging
+  swa_lrs: 0.0001
+  swa_epoch_start: 0.8
+  annealing_epochs: 8
+
+trainer:
+  _target_: pytorch_lightning.Trainer
+  max_epochs: ${train.epoch}
+  deterministic: False
+  accelerator: gpu
+  strategy: auto
+  devices: 1
+  precision: 32
+  limit_train_batches: 1.0
+  check_val_every_n_epoch: 1
+  limit_val_batches: 1.0
+  limit_test_batches: 0.0
+  num_sanity_val_steps: 0
+  # profiler: simple
+  gradient_clip_val: 0
+  benchmark: True
+  # resume_from_checkpoint':
+  enable_model_summary: True
+  reload_dataloaders_every_n_epochs: 0
+  accumulate_grad_batches: ${train.accumulation_steps}
+  logger:
+  callbacks:
+    - ${checkpoint_callback}
+    # - ${lr_callback}
+    - ${earlystop_callback}
+    - ${weight_callback}
+
+hydra:
+  hydra_logging:
+    disable_existing_loggers: true
+  job_logging:
+    handlers:
+      file:
+        filename: ${store.log_path}/${hydra.job.name}.log
+    disable_existing_loggers: false
+  run:
+    dir: ${store.log_path}
+  sweep:
+    dir: ${store.save_path}
+    subdir: log
+  job:
+    chdir: False

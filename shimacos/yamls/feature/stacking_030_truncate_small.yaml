@@ -1,0 +1,56 @@
+cat_cols:
+  - time_idx
+  - hour
+  - minute
+  - minute_mod15
+  - weekday
+label_col: label
+label_cols:
+  - label_onset
+  - label_wakeup
+numerical_cols:
+  - pred_onset_148_gru_scale_factor
+  - pred_onset_156_gru_transformer_residual
+  - pred_onset_163_gru_sleep_target
+  - pred_onset_179_gru_minute_embedding_sync
+  - pred_onset_exp068_transformer
+  - pred_onset_exp078_lstm
+  - pred_onset_exp081_mixup_short_feat14
+  - pred_wakeup_148_gru_scale_factor
+  - pred_wakeup_156_gru_transformer_residual
+  - pred_wakeup_163_gru_sleep_target
+  - pred_wakeup_179_gru_minute_embedding_sync
+  - pred_wakeup_exp068_transformer
+  - pred_wakeup_exp078_lstm
+  - pred_wakeup_exp081_mixup_short_feat14
+  - pred_sleep_exp068_transformer
+  - pred_sleep_exp078_lstm
+  - pred_sleep_exp081_mixup_short_feat14
+  - pred_sleep_163_gru_sleep_target
+  - pred_onset_148_gru_scale_factor_raw
+  - pred_onset_156_gru_transformer_residual_raw
+  - pred_onset_163_gru_sleep_target_raw
+  - pred_onset_179_gru_minute_embedding_sync_raw
+  - pred_onset_exp068_transformer_raw
+  - pred_onset_exp078_lstm_raw
+  - pred_onset_exp081_mixup_short_feat14_raw
+  - pred_wakeup_148_gru_scale_factor_raw
+  - pred_wakeup_156_gru_transformer_residual_raw
+  - pred_wakeup_163_gru_sleep_target_raw
+  - pred_wakeup_179_gru_minute_embedding_sync_raw
+  - pred_wakeup_exp068_transformer_raw
+  - pred_wakeup_exp078_lstm_raw
+  - pred_wakeup_exp081_mixup_short_feat14_raw
+  - prediction_onset
+  - prediction_onset_min
+  - prediction_onset_max
+  - prediction_wakeup
+  - prediction_wakeup_min
+  - prediction_wakeup_max
+  - prediction_onset_var
+  - prediction_wakeup_var
+pred_col: label_pred
+pred_cols:
+  - label_onset_pred
+  - label_wakeup_pred
+version: 030_truncate

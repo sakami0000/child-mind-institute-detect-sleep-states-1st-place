@@ -3,6 +3,7 @@ from __future__ import annotations
 import gc
 import math
 import time
+from pathlib import Path
 
 import numpy as np
 import polars as pl
@@ -16,7 +17,6 @@ from timm.scheduler import CosineLRScheduler
 from torch import nn, optim
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
-
 from src import meta_config
 from src.metric import score
 from src.utils import clear_memory, freeze, set_seed, timer
@@ -48,11 +48,11 @@ class config:
     distance = 110
     daily_score_offset = 0.4
 
-    periodicity_dir = meta_config.input_dir / "periodicity"
+    periodicity_dir = Path("../kami/processed/train")
     filter_size = 10
 
     prune_epoch = 3
-    prune_score = 0.1
+    prune_score = 0.0
 
     device = torch.device("cuda")
     seed = 1029
@@ -89,7 +89,9 @@ class SleepDataset(Dataset):
         series_row_ids = self.series_chunk_row_ids[index]
 
         num_x = self.numerical_inputs[series_row_ids]  # (sequence_length, num_numerical_features)
-        cat_x = self.categorical_inputs[series_row_ids]  # (sequence_length, num_categorical_features)
+        cat_x = self.categorical_inputs[
+            series_row_ids
+        ]  # (sequence_length, num_categorical_features)
         attention_mask = (series_row_ids != -1).astype(np.float32)  # (sequence_length,)
         target = self.targets[series_row_ids]  # (sequence_length, num_targets)
 
@@ -155,7 +157,10 @@ class SleepModel(nn.Module):
         self.stride = 2
 
         self.category_embeddings = nn.ModuleList(
-            [nn.Embedding(128, self.embedding_size, padding_idx=0) for _ in range(categorical_input_size)]
+            [
+                nn.Embedding(128, self.embedding_size, padding_idx=0)
+                for _ in range(categorical_input_size)
+            ]
         )
         self.numerical_linear = nn.Sequential(
             SEScale(numerical_input_size, 8),
@@ -200,7 +205,10 @@ class SleepModel(nn.Module):
         )
 
         self.gru_layers = nn.ModuleList(
-            [ResidualGRU(self.hidden_size, n_layers=1, bidirectional=True) for _ in range(self.n_layers)]
+            [
+                ResidualGRU(self.hidden_size, n_layers=1, bidirectional=True)
+                for _ in range(self.n_layers)
+            ]
         )
 
         self.dconv = nn.Sequential(
@@ -241,7 +249,9 @@ class SleepModel(nn.Module):
         self.output_scale_factor = nn.Parameter(torch.zeros(1, dtype=torch.float))
 
     def forward(self, num_x: torch.FloatTensor, cat_x: torch.LongTensor) -> torch.FloatTensor:
-        cat_embeddings = [embedding(cat_x[:, :, i]) for i, embedding in enumerate(self.category_embeddings)]
+        cat_embeddings = [
+            embedding(cat_x[:, :, i]) for i, embedding in enumerate(self.category_embeddings)
+        ]
         num_x = self.numerical_linear(num_x)
 
         x = torch.cat([num_x] + cat_embeddings, dim=2)
@@ -268,14 +278,18 @@ def predict(model: nn.Module, data_loader: DataLoader, preds_truncate_size: int)
     preds = []
 
     with torch.inference_mode():
-        for series_row_ids, num_x, cat_x, attention_mask, _ in tqdm(data_loader, desc="predict", leave=False):
+        for series_row_ids, num_x, cat_x, attention_mask, _ in tqdm(
+            data_loader, desc="predict", leave=False
+        ):
             series_row_ids = series_row_ids[:, preds_truncate_size:-preds_truncate_size]
             attention_mask = attention_mask[:, preds_truncate_size:-preds_truncate_size]
             series_row_ids = series_row_ids.masked_select(attention_mask.bool()).numpy()
             row_ids.append(series_row_ids)
 
             pred = (
-                model(num_x.to(device), cat_x.to(device))[:, preds_truncate_size:-preds_truncate_size]
+                model(num_x.to(device), cat_x.to(device))[
+                    :, preds_truncate_size:-preds_truncate_size
+                ]
                 .detach()
                 .sigmoid()
                 .cpu()
@@ -307,7 +321,10 @@ def make_submission(
     event_dfs = []
 
     for series_id, series_df in tqdm(
-        preds_df.group_by("series_id"), desc="find peaks", leave=False, total=preds_df["series_id"].n_unique()
+        preds_df.group_by("series_id"),
+        desc="find peaks",
+        leave=False,
+        total=preds_df["series_id"].n_unique(),
     ):
         for event in ["onset", "wakeup"]:
             event_preds = series_df[f"prediction_{event}"].to_numpy().copy()
@@ -325,7 +342,8 @@ def make_submission(
         pl.concat(event_dfs)
         .with_columns(pl.col("timestamp").dt.offset_by("2h").dt.date().alias("date"))
         .with_columns(
-            pl.col("score") / (pl.col("score").sum().over(["series_id", "event", "date"]) + daily_score_offset)
+            pl.col("score")
+            / (pl.col("score").sum().over(["series_id", "event", "date"]) + daily_score_offset)
         )
         .sort(["series_id", "step"])
         .with_columns(pl.arange(0, pl.count()).alias("row_id"))
@@ -351,7 +369,9 @@ def main(debug: bool = False) -> None:
     if debug:
         sampled_series_ids = train_df.get_column("series_id").unique().sample(10, seed=config.seed)
         train_df = (
-            train_df.filter(pl.col("series_id").is_in(sampled_series_ids)).group_by("series_id").head(12 * 60 * 24)
+            train_df.filter(pl.col("series_id").is_in(sampled_series_ids))
+            .group_by("series_id")
+            .head(12 * 60 * 24)
         )
         train_events_df = train_events_df.filter(pl.col("series_id").is_in(sampled_series_ids))
 
@@ -372,8 +392,13 @@ def main(debug: bool = False) -> None:
 
         train_events_df = train_events_df.with_columns(pl.col("step").cast(pl.UInt32))
         train_df = (
-            train_df.join(train_events_df.select(["series_id", "step", "event"]), on=["series_id", "step"], how="left")
+            train_df.join(
+                train_events_df.select(["series_id", "step", "event"]),
+                on=["series_id", "step"],
+                how="left",
+            )
             .to_dummies(columns=["event"])
+            .with_columns(pl.col(target_columns).cast(pl.Float32))
             .with_columns(
                 [
                     pl.max_horizontal(
@@ -390,14 +415,19 @@ def main(debug: bool = False) -> None:
 
         # sleep labels
         full_train_events_df = train_events_df.join(
-            train_events_df.drop_nulls().group_by(["series_id", "night"]).count().filter(pl.col("count") == 2),
+            train_events_df.drop_nulls()
+            .group_by(["series_id", "night"])
+            .count()
+            .filter(pl.col("count") == 2),
             how="semi",
             on=["series_id", "night"],
         ).rename({"event": "full_event"})
 
         train_df = (
             train_df.join(
-                full_train_events_df.select(["series_id", "step", "full_event"]), on=["series_id", "step"], how="left"
+                full_train_events_df.select(["series_id", "step", "full_event"]),
+                on=["series_id", "step"],
+                how="left",
             )
             .to_dummies(columns=["full_event"])
             .with_columns(
@@ -419,10 +449,24 @@ def main(debug: bool = False) -> None:
             pl.col("timestamp").dt.hour().alias("hour") + 1,
             pl.col("timestamp").dt.minute().alias("minute") + 1,
             pl.col("timestamp").dt.weekday().alias("weekday"),
-            pl.col(["anglez", "enmo"]).rolling_mean(12, center=True).over("series_id").suffix("_12_rolling_mean"),
-            pl.col(["anglez", "enmo"]).rolling_std(12, center=True).over("series_id").suffix("_12_rolling_std"),
-            pl.col(["anglez", "enmo"]).rolling_max(12, center=True).over("series_id").suffix("_12_rolling_max"),
-            pl.col("anglez").diff().abs().rolling_median(60, center=True).over("series_id").suffix("_diff_5min_median"),
+            pl.col(["anglez", "enmo"])
+            .rolling_mean(12, center=True)
+            .over("series_id")
+            .suffix("_12_rolling_mean"),
+            pl.col(["anglez", "enmo"])
+            .rolling_std(12, center=True)
+            .over("series_id")
+            .suffix("_12_rolling_std"),
+            pl.col(["anglez", "enmo"])
+            .rolling_max(12, center=True)
+            .over("series_id")
+            .suffix("_12_rolling_max"),
+            pl.col("anglez")
+            .diff()
+            .abs()
+            .rolling_median(60, center=True)
+            .over("series_id")
+            .suffix("_diff_5min_median"),
         )
 
         # add periodicity
@@ -434,7 +478,9 @@ def main(debug: bool = False) -> None:
 
         for series_id in all_series_ids:
             periodicity_flag = np.load(config.periodicity_dir / series_id / "periodicity.npy")
-            periodicity = np.minimum(periodicity_flag, uniform_filter1d(periodicity_flag, size=config.filter_size))
+            periodicity = np.minimum(
+                periodicity_flag, uniform_filter1d(periodicity_flag, size=config.filter_size)
+            )
 
             periodicity_series_ids.append(series_id)
             periodicity_flags.append(periodicity_flag)
@@ -467,14 +513,18 @@ def main(debug: bool = False) -> None:
         series_chunk_row_ids = []  # list[list[int]]
         for series_id, row_ids in tqdm(series_row_ids.items(), desc="split into chunks"):
             for start_idx in range(
-                -config.preds_truncate_size, len(row_ids), int(config.stride_size / config.epoch_sample_rate)
+                -config.preds_truncate_size,
+                len(row_ids),
+                int(config.stride_size / config.epoch_sample_rate),
             ):
                 if start_idx + config.chunk_size <= len(row_ids) + config.preds_truncate_size:
                     chunk_row_ids = row_ids[max(0, start_idx) : start_idx + config.chunk_size]
 
                     # padding
                     if len(chunk_row_ids) < config.chunk_size:
-                        chunk_row_ids = [-1] * (config.chunk_size - len(chunk_row_ids)) + chunk_row_ids
+                        chunk_row_ids = [-1] * (
+                            config.chunk_size - len(chunk_row_ids)
+                        ) + chunk_row_ids
 
                     series_chunk_ids.append(series_id)
                     series_chunk_row_ids.append(np.array(chunk_row_ids))
@@ -483,17 +533,25 @@ def main(debug: bool = False) -> None:
 
                     # padding
                     if len(chunk_row_ids) < config.chunk_size:
-                        chunk_row_ids = chunk_row_ids + [-1] * (config.chunk_size - len(chunk_row_ids))
+                        chunk_row_ids = chunk_row_ids + [-1] * (
+                            config.chunk_size - len(chunk_row_ids)
+                        )
 
                     series_chunk_ids.append(series_id)
                     series_chunk_row_ids.append(np.array(chunk_row_ids))
                     break
 
         # drop features
-        numerical_inputs = train_df.select(numerical_columns).fill_null(0.0).to_numpy().astype(np.float32)
-        categorical_inputs = train_df.select(categorical_columns).fill_null(0.0).to_numpy().astype(np.int64)
+        numerical_inputs = (
+            train_df.select(numerical_columns).fill_null(0.0).to_numpy().astype(np.float32)
+        )
+        categorical_inputs = (
+            train_df.select(categorical_columns).fill_null(0.0).to_numpy().astype(np.int64)
+        )
         target_columns = train_df.select(r"^event_(onset|wakeup).*$").columns + ["sleep_label"]
-        train_df = train_df.select(["row_id", "series_id", "step", "timestamp", "periodicity"] + target_columns)
+        train_df = train_df.select(
+            ["row_id", "series_id", "step", "timestamp", "periodicity"] + target_columns
+        )
 
         # pad inputs
         numerical_inputs = np.pad(numerical_inputs, ((0, 1), (0, 0)))
@@ -506,8 +564,12 @@ def main(debug: bool = False) -> None:
         series_chunk_ids = np.array(series_chunk_ids)
         splits = [
             (
-                np.where(np.isin(series_chunk_ids, split_series_id["train_series_ids"]))[0],  # train_idx
-                np.where(np.isin(series_chunk_ids, split_series_id["valid_series_ids"]))[0],  # valid_idx
+                np.where(np.isin(series_chunk_ids, split_series_id["train_series_ids"]))[
+                    0
+                ],  # train_idx
+                np.where(np.isin(series_chunk_ids, split_series_id["valid_series_ids"]))[
+                    0
+                ],  # valid_idx
             )
             for split_series_id in split_series_ids
         ]
@@ -590,7 +652,9 @@ def main(debug: bool = False) -> None:
                 epoch_start_time = time.time()
                 model.train()
 
-                sampled_train_idx = train_idx[epoch % config.epoch_sample_rate :: config.epoch_sample_rate]
+                sampled_train_idx = train_idx[
+                    epoch % config.epoch_sample_rate :: config.epoch_sample_rate
+                ]
 
                 train_dataset = SleepDataset(
                     series_chunk_row_ids=series_chunk_row_ids,
@@ -640,15 +704,21 @@ def main(debug: bool = False) -> None:
                     optimizer.zero_grad()
                     scheduler.step(step + train_size * epoch)
 
-                    loss_ema = loss_ema * 0.9 + loss.item() * 0.1 if loss_ema is not None else loss.item()
+                    loss_ema = (
+                        loss_ema * 0.9 + loss.item() * 0.1 if loss_ema is not None else loss.item()
+                    )
                     progress.set_postfix(loss=loss_ema)
 
                 epoch_elapsed_time = (time.time() - epoch_start_time) / 60
                 predict_start_time = time.time()
 
-                valid_fold_preds_df = predict(model, valid_loader, preds_truncate_size=config.preds_truncate_size)
+                valid_fold_preds_df = predict(
+                    model, valid_loader, preds_truncate_size=config.preds_truncate_size
+                )
                 valid_fold_preds_df = (
-                    valid_df[["row_id"]].join(valid_fold_preds_df, how="left", on="row_id").fill_null(0.0)
+                    valid_df[["row_id"]]
+                    .join(valid_fold_preds_df, how="left", on="row_id")
+                    .fill_null(0.0)
                 )
 
                 valid_preds_df = valid_df.with_columns(
@@ -680,7 +750,9 @@ def main(debug: bool = False) -> None:
                     torch.save(model.state_dict(), model_path)
 
                 if epoch >= config.prune_epoch and valid_score < config.prune_score:
-                    raise Exception(f"Training failed. epoch: {epoch + 1}, score: {valid_score:.5f}")
+                    raise Exception(
+                        f"Training failed. epoch: {epoch + 1}, score: {valid_score:.5f}"
+                    )
 
                 if debug:
                     break
@@ -694,11 +766,19 @@ def main(debug: bool = False) -> None:
             valid_submissions.append(best_valid_fold_submission)
 
             # save
-            best_valid_fold_preds_df.write_parquet(data_checkpoint_dir / f"valid_fold{fold}_preds.parquet")
-            best_valid_fold_submission.write_parquet(data_checkpoint_dir / f"valid_fold{fold}_submission.parquet")
+            best_valid_fold_preds_df.write_parquet(
+                data_checkpoint_dir / f"valid_fold{fold}_preds.parquet"
+            )
+            best_valid_fold_submission.write_parquet(
+                data_checkpoint_dir / f"valid_fold{fold}_submission.parquet"
+            )
 
-            valid_fold_preds_df.write_parquet(data_checkpoint_dir / f"last_valid_fold{fold}_preds.parquet")
-            valid_fold_submission.write_parquet(data_checkpoint_dir / f"last_valid_fold{fold}_submission.parquet")
+            valid_fold_preds_df.write_parquet(
+                data_checkpoint_dir / f"last_valid_fold{fold}_preds.parquet"
+            )
+            valid_fold_submission.write_parquet(
+                data_checkpoint_dir / f"last_valid_fold{fold}_submission.parquet"
+            )
 
             del train_dataset, valid_dataset
             del train_loader, valid_loader
@@ -715,10 +795,12 @@ def main(debug: bool = False) -> None:
     logger.info(f"cv score: {cv_score:.5f}")
 
     # save
-    pl.concat(valid_preds).sort("row_id").write_parquet(meta_config.save_dir / "valid_preds.parquet")
-    pl.concat(valid_submissions).with_columns(pl.arange(0, pl.count()).alias("row_id")).sort("row_id").write_parquet(
-        meta_config.save_dir / "valid_submission.parquet"
+    pl.concat(valid_preds).sort("row_id").write_parquet(
+        meta_config.save_dir / "valid_preds.parquet"
     )
+    pl.concat(valid_submissions).with_columns(pl.arange(0, pl.count()).alias("row_id")).sort(
+        "row_id"
+    ).write_parquet(meta_config.save_dir / "valid_submission.parquet")
 
     elapsed_time = (time.time() - start_time) / 60
     logger.info(f"all processes done in {elapsed_time:.1f} min.")
@@ -726,12 +808,14 @@ def main(debug: bool = False) -> None:
 
 def run() -> None:
     # debug
-    logger.opt(colors=True).info("<yellow>********************** mode : debug **********************</yellow>")
-    main(debug=True)
+    # logger.opt(colors=True).info("<yellow>********************** mode : debug **********************</yellow>")
+    # main(debug=True)
 
     # main
     logger.opt(colors=True).info("<yellow>" + "-" * 60 + "</yellow>")
-    logger.opt(colors=True).info("<yellow>********************** mode : main **********************</yellow>")
+    logger.opt(colors=True).info(
+        "<yellow>********************** mode : main **********************</yellow>"
+    )
     set_seed(config.seed)
     main(debug=False)
 

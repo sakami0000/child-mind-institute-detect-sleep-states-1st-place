@@ -1,0 +1,4 @@
+input
+!input/fold/*
+output
+__pycache__

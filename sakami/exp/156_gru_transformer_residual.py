@@ -3,6 +3,7 @@ from __future__ import annotations
 import gc
 import math
 import time
+from pathlib import Path
 
 import numpy as np
 import polars as pl
@@ -50,11 +51,11 @@ class config:
     distance = 110
     daily_score_offset = 0.4
 
-    periodicity_dir = meta_config.input_dir / "periodicity"
+    periodicity_dir = Path("../kami/processed/train")
     filter_size = 10
 
     prune_epoch = 3
-    prune_score = 0.1
+    prune_score = 0.0
 
     use_amp = True
     device = torch.device("cuda")
@@ -96,14 +97,7 @@ class SleepDataset(Dataset):
         attention_mask = (series_row_ids != -1).astype(np.float32)  # (sequence_length,)
         target = self.targets[series_row_ids]  # (sequence_length, num_targets)
 
-        assert (
-            self.max_series_length
-            == len(series_row_ids)
-            == len(num_x)
-            == len(cat_x)
-            == len(attention_mask)
-            == len(target)
-        )
+        assert self.max_series_length == len(series_row_ids) == len(num_x) == len(cat_x) == len(attention_mask) == len(target)
         return series_row_ids, num_x, cat_x, attention_mask, target
 
 
@@ -157,9 +151,7 @@ class SleepModel(nn.Module):
         self.kernel_sizes = [11, 7, 5]
         self.stride = 2
 
-        self.category_embeddings = nn.ModuleList(
-            [nn.Embedding(128, self.embedding_size, padding_idx=0) for _ in range(categorical_input_size)]
-        )
+        self.category_embeddings = nn.ModuleList([nn.Embedding(128, self.embedding_size, padding_idx=0) for _ in range(categorical_input_size)])
         self.numerical_linear = nn.Sequential(
             SEScale(numerical_input_size, 8),
             nn.Linear(numerical_input_size, self.hidden_size),
@@ -202,9 +194,7 @@ class SleepModel(nn.Module):
             ],
         )
 
-        self.gru_layers = nn.ModuleList(
-            [ResidualGRU(self.hidden_size, n_layers=1, bidirectional=True) for _ in range(self.n_layers)]
-        )
+        self.gru_layers = nn.ModuleList([ResidualGRU(self.hidden_size, n_layers=1, bidirectional=True) for _ in range(self.n_layers)])
 
         config = AutoConfig.from_pretrained(model_name, add_pooling_layer=False)
         config.attention_window = 30
@@ -286,10 +276,7 @@ def predict(model: nn.Module, data_loader: DataLoader, preds_truncate_size: int,
 
             with autocast(enabled=use_amp):
                 pred = (
-                    model(num_x.to(device), cat_x.to(device))[:, preds_truncate_size:-preds_truncate_size]
-                    .detach()
-                    .sigmoid()
-                    .cpu()
+                    model(num_x.to(device), cat_x.to(device))[:, preds_truncate_size:-preds_truncate_size].detach().sigmoid().cpu()
                 )  # (batch_size, sequence_length - preds_truncate_size * 2, 2)
 
             pred_mask = attention_mask.unsqueeze(-1).expand(-1, -1, 2).bool()
@@ -317,9 +304,7 @@ def make_submission(
 ) -> pl.DataFrame:
     event_dfs = []
 
-    for series_id, series_df in tqdm(
-        preds_df.group_by("series_id"), desc="find peaks", leave=False, total=preds_df["series_id"].n_unique()
-    ):
+    for series_id, series_df in tqdm(preds_df.group_by("series_id"), desc="find peaks", leave=False, total=preds_df["series_id"].n_unique()):
         for event in ["onset", "wakeup"]:
             event_preds = series_df[f"prediction_{event}"].to_numpy().copy()
             event_preds *= 1 - periodicity_dict[series_id][: len(event_preds)]
@@ -335,9 +320,7 @@ def make_submission(
     submission_df = (
         pl.concat(event_dfs)
         .with_columns(pl.col("timestamp").dt.offset_by("2h").dt.date().alias("date"))
-        .with_columns(
-            pl.col("score") / (pl.col("score").sum().over(["series_id", "event", "date"]) + daily_score_offset)
-        )
+        .with_columns(pl.col("score") / (pl.col("score").sum().over(["series_id", "event", "date"]) + daily_score_offset))
         .sort(["series_id", "step"])
         .with_columns(pl.arange(0, pl.count()).alias("row_id"))
         .select(["row_id", "series_id", "step", "event", "score"])
@@ -361,9 +344,7 @@ def main(debug: bool = False) -> None:
 
     if debug:
         sampled_series_ids = train_df.get_column("series_id").unique().sample(10, seed=config.seed)
-        train_df = (
-            train_df.filter(pl.col("series_id").is_in(sampled_series_ids)).group_by("series_id").head(12 * 60 * 24)
-        )
+        train_df = train_df.filter(pl.col("series_id").is_in(sampled_series_ids)).group_by("series_id").head(12 * 60 * 24)
         train_events_df = train_events_df.filter(pl.col("series_id").is_in(sampled_series_ids))
 
         split_series_count = 7
@@ -385,12 +366,11 @@ def main(debug: bool = False) -> None:
         train_df = (
             train_df.join(train_events_df.select(["series_id", "step", "event"]), on=["series_id", "step"], how="left")
             .to_dummies(columns=["event"])
+            .with_columns(pl.col(target_columns).cast(pl.Float32))
             .with_columns(
                 [
                     pl.max_horizontal(
-                        pl.col(target_column)
-                        .rolling_max(window_size * 2 - 1, min_periods=1, center=True)
-                        .over("series_id")
+                        pl.col(target_column).rolling_max(window_size * 2 - 1, min_periods=1, center=True).over("series_id")
                         * (1 - 1 / len(tolerance_steps) * i)
                         for i, window_size in enumerate(tolerance_steps)
                     ).alias(target_column)
@@ -456,9 +436,7 @@ def main(debug: bool = False) -> None:
         series_chunk_ids = []  # list[str]
         series_chunk_row_ids = []  # list[list[int]]
         for series_id, row_ids in tqdm(series_row_ids.items(), desc="split into chunks"):
-            for start_idx in range(
-                -config.preds_truncate_size, len(row_ids), int(config.stride_size / config.epoch_sample_rate)
-            ):
+            for start_idx in range(-config.preds_truncate_size, len(row_ids), int(config.stride_size / config.epoch_sample_rate)):
                 if start_idx + config.chunk_size <= len(row_ids) + config.preds_truncate_size:
                     chunk_row_ids = row_ids[max(0, start_idx) : start_idx + config.chunk_size]
 
@@ -620,8 +598,7 @@ def main(debug: bool = False) -> None:
                     with autocast(enabled=config.use_amp):
                         preds = model(num_x.to(config.device), cat_x.to(config.device))
                         loss = (
-                            nn.BCEWithLogitsLoss(reduction="none")(preds, target.to(config.device))
-                            * attention_mask.unsqueeze(-1).to(config.device)
+                            nn.BCEWithLogitsLoss(reduction="none")(preds, target.to(config.device)) * attention_mask.unsqueeze(-1).to(config.device)
                         ).mean()
 
                     scaler.scale(loss).backward()
@@ -637,16 +614,10 @@ def main(debug: bool = False) -> None:
                 epoch_elapsed_time = (time.time() - epoch_start_time) / 60
                 predict_start_time = time.time()
 
-                valid_fold_preds_df = predict(
-                    model, valid_loader, preds_truncate_size=config.preds_truncate_size, use_amp=config.use_amp
-                )
-                valid_fold_preds_df = (
-                    valid_df[["row_id"]].join(valid_fold_preds_df, how="left", on="row_id").fill_null(0.0)
-                )
+                valid_fold_preds_df = predict(model, valid_loader, preds_truncate_size=config.preds_truncate_size, use_amp=config.use_amp)
+                valid_fold_preds_df = valid_df[["row_id"]].join(valid_fold_preds_df, how="left", on="row_id").fill_null(0.0)
 
-                valid_preds_df = valid_df.with_columns(
-                    valid_fold_preds_df.select(["prediction_onset", "prediction_wakeup"])
-                )
+                valid_preds_df = valid_df.with_columns(valid_fold_preds_df.select(["prediction_onset", "prediction_wakeup"]))
                 valid_fold_submission = make_submission(
                     valid_preds_df,
                     periodicity_dict,
@@ -719,8 +690,8 @@ def main(debug: bool = False) -> None:
 
 def run() -> None:
     # debug
-    logger.opt(colors=True).info("<yellow>********************** mode : debug **********************</yellow>")
-    main(debug=True)
+    # logger.opt(colors=True).info("<yellow>********************** mode : debug **********************</yellow>")
+    # main(debug=True)
 
     # main
     logger.opt(colors=True).info("<yellow>" + "-" * 60 + "</yellow>")

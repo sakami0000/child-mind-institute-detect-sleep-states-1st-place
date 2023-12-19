@@ -5,15 +5,19 @@ services:
       context: .
       dockerfile: Dockerfile
     volumes:
-      - $PWD:/kaggle/working
-    working_dir: /kaggle/working
+      - $PWD/input:/root/app/input
+      - $PWD/sakami:/root/app/sakami
+      - $PWD/kami:/root/app/kami
+      - $PWD/shimacos:/root/app/shimacos
+      - $PWD/tasks.py:/root/app/tasks.py
+    working_dir: /root/app
     command: bash -c "echo start && /bin/bash"
-    tty: true  
+    tty: true
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
               count: 1
-              capabilities: [ gpu ]
-    shm_size: '2gb'
+              capabilities: [gpu]
+    shm_size: "2gb"
