@@ -232,9 +232,7 @@ def score(
     assert set(tolerances.keys()) == set(solution[event_column_name]).difference({"start", "end"}), (
         f"Solution column {event_column_name} must contain the same events " "as defined in tolerances."
     )
-    assert pd.api.types.is_numeric_dtype(
-        solution[time_column_name]
-    ), f"Solution column {time_column_name} must be of numeric type."
+    assert pd.api.types.is_numeric_dtype(solution[time_column_name]), f"Solution column {time_column_name} must be of numeric type."
 
     # Validate submission format
     for column_name in [
@@ -287,9 +285,7 @@ def filter_detections(detections: pd.DataFrame, intervals: pd.DataFrame) -> pd.D
     return detections.loc[is_scored].reset_index(drop=True)
 
 
-def find_nearest_time_idx(
-    times: list[int], target_time: int, excluded_indices: set[int], tolerance: float
-) -> tuple[int, int]:
+def find_nearest_time_idx(times: list[int], target_time: int, excluded_indices: set[int], tolerance: float) -> tuple[int, int]:
     """Find the index of the nearest time to the target_time that is not in excluded_indices.
 
     From: https://github.com/tubo213/kaggle-child-mind-institute-detect-sleep-states/blob/main/src/utils/metrics.py
@@ -331,9 +327,7 @@ def match_detections(tolerance: float, ground_truths: pd.DataFrame, detections: 
     return detections_sorted
 
 
-def precision_recall_curve(
-    matches: np.ndarray, scores: np.ndarray, p: int
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def precision_recall_curve(matches: np.ndarray, scores: np.ndarray, p: int) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     if len(matches) == 0:
         return [1], [0], []
 
@@ -406,9 +400,7 @@ def event_detection_ap(
     # Remove detections outside of scoring intervals
     if use_scoring_intervals:
         detections_filtered = []
-        for (det_group, dets), (int_group, ints) in zip(
-            detections.groupby(series_id_column_name), intervals.groupby(series_id_column_name)
-        ):
+        for (det_group, dets), (int_group, ints) in zip(detections.groupby(series_id_column_name), intervals.groupby(series_id_column_name)):
             assert det_group == int_group
             detections_filtered.append(filter_detections(dets, ints))
         detections_filtered = pd.concat(detections_filtered, ignore_index=True)
@@ -417,22 +409,17 @@ def event_detection_ap(
 
     # Create table of event-class x tolerance x series_id values
     aggregation_keys = pd.DataFrame(
-        [
-            (ev, tol, vid)
-            for ev in tolerances.keys()
-            for tol in tolerances[ev]
-            for vid in ground_truths[series_id_column_name].unique()
-        ],
+        [(ev, tol, vid) for ev in tolerances.keys() for tol in tolerances[ev] for vid in ground_truths[series_id_column_name].unique()],
         columns=[event_column_name, "tolerance", series_id_column_name],
     )
 
     # Create match evaluation groups: event-class x tolerance x series_id
-    detections_grouped = aggregation_keys.merge(
-        detections_filtered, on=[event_column_name, series_id_column_name], how="left"
-    ).groupby([event_column_name, "tolerance", series_id_column_name])
-    ground_truths_grouped = aggregation_keys.merge(
-        ground_truths, on=[event_column_name, series_id_column_name], how="left"
-    ).groupby([event_column_name, "tolerance", series_id_column_name])
+    detections_grouped = aggregation_keys.merge(detections_filtered, on=[event_column_name, series_id_column_name], how="left").groupby(
+        [event_column_name, "tolerance", series_id_column_name]
+    )
+    ground_truths_grouped = aggregation_keys.merge(ground_truths, on=[event_column_name, series_id_column_name], how="left").groupby(
+        [event_column_name, "tolerance", series_id_column_name]
+    )
     # Match detections to ground truth events by evaluation group
     detections_matched = []
     for key in aggregation_keys.itertuples(index=False):
@@ -455,7 +442,10 @@ def event_detection_ap(
         )
     )
     # Average over tolerances, then over event classes
-    mean_ap = ap_table.groupby(event_column_name).mean().sum() / len(event_classes)
+    try:
+        mean_ap = ap_table.groupby(event_column_name).mean().sum() / len(event_classes)
+    except Exception:
+        mean_ap = 0.0
 
     if return_detections_matched:
         return mean_ap, detections_matched
