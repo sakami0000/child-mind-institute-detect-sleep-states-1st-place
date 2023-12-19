@@ -6,7 +6,7 @@
   unzip ./input/child-mind-institute-detect-sleep-states.zip -d ./input
   ```
 
-## How to train
+## Training
 
 - setting up using Docker
 
@@ -26,6 +26,6 @@
     inv run-all --overwrite-folds
     ```
 
-## How to submission
+## Inference
 
 - Use [this notebook](https://www.kaggle.com/shimacos/kaggle-smi-submission-final)
