@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from invoke import Config, task
 
 
@@ -99,6 +101,10 @@ def run_sakami_1st(c: Config) -> None:
     - output/163_gru_sleep_target/valid_preds.parquet
     - output/179_gru_minute_embedding_sync/valid_preds.parquet
     """
+
+    periodicity_dir = Path("input/periodicity/")
+    periodicity_dir.mkdir(exist_ok=True)
+    c.run(f"cp -r kami/processed/train/ {str(periodicity_dir)}")
 
     with c.cd("sakami"):
         c.run("python -m exp.148_gru_scale_factor")
